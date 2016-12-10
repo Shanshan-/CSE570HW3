@@ -54,13 +54,13 @@ def parseFile(filename, nulVal):
 
     return _latency, _loss, _throughput, _avglatency, _avgloss, _avgthroughput
 
-#splits a list of tuples into two lists
+#splits a list of tuples into two lists, qos values, and qoe values (in order
 def splitList(sourceList):
     listx = []
     listy = []
     for num in range(0, len(sourceList)):
-        listx.append(sourceList[num][0]) #qos value for analysis 1
-        listy.append(sourceList[num][1]) #qoe value for analysis 2
+        listx.append(sourceList[num][0]) #qos value
+        listy.append(sourceList[num][1]) #qoe value
     return listx, listy
 
 #plot the average QoE values for each individual QoS
@@ -78,7 +78,6 @@ def analyzeAvg(_latency, _loss, _throughput, title):
     plt.xlabel("QoS value (ms)")
     plt.ylabel("Average QoE (ms)")
     plt.plot(np.asarray(plotLatencyx), np.asarray(plotLatencyy), label = "Latency")
-
 
     #display loss
     plt.subplot(222)
@@ -102,11 +101,26 @@ def analyzeAvg(_latency, _loss, _throughput, title):
     plt.plot(np.asarray(plotLatencyx), np.asarray(plotLatencyy), label = "Latency (ms)")
     plt.plot(np.asarray(plotLossx), np.asarray(plotLossy), label = "Loss (%)")
     plt.plot(np.asarray(plotThroughputx), np.asarray(plotThroughputy), label = "Throughput (Mbps)")
-    plt.legend(loc = "center right", fontsize = "small")
+    plt.legend(loc = "upper center", fontsize = "small")
 
     #show all
     plt.subplots_adjust(hspace = .5)
     plt.savefig(title + " QoS effect on QoE.jpg")
+
+    #display all together
+    plt.figure(figsize=(8, 5))
+    plt.subplot(111)
+    plt.title("All " + title)
+    plt.xlabel("QoS value")
+    plt.ylabel("average QoE")
+    plt.plot(np.asarray(plotLatencyx), np.asarray(plotLatencyy), label = "Latency (ms)")
+    plt.plot(np.asarray(plotLossx), np.asarray(plotLossy), label = "Loss (%)")
+    plt.plot(np.asarray(plotThroughputx), np.asarray(plotThroughputy), label = "Throughput (Mbps)")
+    plt.legend(loc = "upper center", fontsize = "small")
+
+    #show all
+    plt.subplots_adjust(hspace = .5)
+    plt.savefig(title + " QoS effect on QoE all.jpg")
     #plt.show()
     return
 
@@ -161,8 +175,8 @@ def analyzeScatter(_latency, _loss, _throughput, title):
 
 #IQX hypothesis
 def func(x, a, b, c):
-    return a + b * ( math.e ** ( -c * x ))
-    return a * ( math.e ** ( -b * x )) + c
+    return a * (np.exp( -b * x )) + c
+    return a * (math.e ** ( -b * x )) + c
 
 #plot the QoE values for each individual QoS, and fit the IQX hypothesis to it
 def analyzePlot(_latency, _loss, _throughput, title):
@@ -173,62 +187,68 @@ def analyzePlot(_latency, _loss, _throughput, title):
     plt.figure(figsize=(15, 10))
     plt.suptitle(title)
 
-    #display latency
-    ploty = np.asarray(plotLatencyx, dtype = float)
-    plotx = np.asarray(plotLatencyy, dtype = float)
-    plt.subplot(221)
-    plt.title("Latency")
-    plt.xlabel("QoS value (ms)")
-    plt.ylabel("Average QoE (ms)")
-    popt, pcov = curve_fit(func, plotx, ploty)
-    plt.plot(plotx, ploty, label = "Latency")
-    print popt
-    plt.plot(plotx, func(plotx, *popt), label = "Fitted Latency")
-    plt.legend()
-
-    #display loss
-    ploty = np.asarray(plotLossx, dtype = float)
-    plotx = np.asarray(plotLossy, dtype = float)
-    plt.subplot(222)
-    plt.title("Loss")
-    plt.xlabel("QoS value (%)")
-    plt.ylabel("average QoE (ms)")
-    popt, pcov = curve_fit(func, plotx, ploty)
-    plt.plot(plotx, ploty, label = "Loss")
-    print popt
-    plt.plot(plotx, func(plotx, *popt), label = "Fitted Loss")
-    plt.legend()
-
     #display throughput
-    ploty = np.asarray(plotThroughputx, dtype = float)
-    plotx = np.asarray(plotThroughputy, dtype = float)
+    plotx = np.asarray(plotThroughputx, dtype = float)
+    ploty = np.asarray(plotThroughputy, dtype = float)
     plt.subplot(223)
     plt.title("Throughput")
     plt.xlabel("QoS value (Mbps)")
     plt.ylabel("average QoE (ms)")
-    popt, pcov = curve_fit(func, plotx, ploty)
+    popt, pcov = curve_fit(func, plotx, ploty, p0=(1e4, 1e-2, 1e3))
+    print "alpha = %s , beta = %s, gamma = %s" % (popt[0], popt[1], popt[2])
+    perr = np.sqrt(np.diag(pcov))
+    print "Standard deviation: alpha = %s , beta = %s, gamma = %s" % (perr[0], perr[1], perr[2])
     plt.plot(plotx, ploty, label = "Throughput")
-    print popt
     plt.plot(plotx, func(plotx, *popt), label = "Fitted Throughput")
+    plt.legend()
+
+    #display latency
+    plotx = np.asarray(plotLatencyx, dtype = float)
+    ploty = np.asarray(plotLatencyy, dtype = float)
+    plt.subplot(221)
+    plt.title("Latency")
+    plt.xlabel("QoS value (ms)")
+    plt.ylabel("Average QoE (ms)")
+    popt, pcov = curve_fit(func, plotx, ploty, p0=(1e3, -1e-4, 1e3))
+    print "alpha = %s , beta = %s, gamma = %s" % (popt[0], popt[1], popt[2])
+    perr = np.sqrt(np.diag(pcov))
+    print "Standard deviation: alpha = %s , beta = %s, gamma = %s" % (perr[0], perr[1], perr[2])
+    plt.plot(plotx, ploty, label = "Latency")
+    plt.plot(plotx, func(plotx, *popt), label = "Fitted Latency")
+    plt.legend()
+
+    #display loss
+    plotx = np.asarray(plotLossx, dtype = float)
+    ploty = np.asarray(plotLossy, dtype = float)
+    plt.subplot(222)
+    plt.title("Loss")
+    plt.xlabel("QoS value (%)")
+    plt.ylabel("average QoE (ms)")
+    popt, pcov = curve_fit(func, plotx, ploty, p0=(1e3, 1e-2, 1e3))
+    print "alpha = %s , beta = %s, gamma = %s" % (popt[0], popt[1], popt[2])
+    perr = np.sqrt(np.diag(pcov))
+    print "Standard deviation: alpha = %s , beta = %s, gamma = %s" % (perr[0], perr[1], perr[2])
+    plt.plot(plotx, ploty, label = "Loss")
+    plt.plot(plotx, func(plotx, *popt), label = "Fitted Loss")
     plt.legend()
 
     #show all
     plt.subplots_adjust(hspace = .5)
-    plt.savefig(title + " test.jpg")
+    plt.savefig(title + " QoS effect on QoE with LOBF.jpg")
     #plt.show()
     return
 
 """ PROGRAM BEGINS HERE """
-"""
-#question 1
+"""#question 1
 latency, loss, throughput, avglatency, avgloss, avgthroughput = parseFile("video_startupdelays.txt", 20000)
 analyzeAvg(avglatency, avgloss, avgthroughput, "Average Video")
-analyze(latency, loss, throughput, "Video")
+analyzeScatter(latency, loss, throughput, "Video")
 latency, loss, throughput, avglatency, avgloss, avgthroughput = parseFile("webpage_loadtimes.txt", 30000)
 analyzeAvg(avglatency, avgloss, avgthroughput, "Average Web")
-analyze(latency, loss, throughput, "Web")
+analyzeScatter(latency, loss, throughput, "Web")
 """
-
 #question 3
 latency, loss, throughput, avglatency, avgloss, avgthroughput = parseFile("video_startupdelays.txt", 20000)
-analyzePlot(avglatency, avgloss, avgthroughput, "Plotting")
+analyzePlot(avglatency, avgloss, avgthroughput, "Average Video")
+latency, loss, throughput, avglatency, avgloss, avgthroughput = parseFile("webpage_loadtimes.txt", 30000)
+analyzePlot(avglatency, avgloss, avgthroughput, "Average Web")
